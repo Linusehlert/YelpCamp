@@ -1,8 +1,9 @@
 const mongoose = require('mongoose')
 const Campground = require('../models/campground')
+const Review = require('../models/review')
 const catchAsync = require('../utils/catchAsync')
 const ExpressError = require('../utils/expressError')
-const {campgroundsSchema} = require('../schemas')
+const {campgroundsSchema, reviewSchema} = require('../schemas')
 mongoose.connect('mongodb://localhost:27017/yelp-camp', {})
 
 const db = mongoose.connection
@@ -19,8 +20,17 @@ const validateCampground = (req, res, next) => {
         throw new ExpressError(msg, 400)
     } else next()
 }
+
+const validateReview = (req, res, next) => {
+    const {error} = reviewSchema.validate(req.body)
+    if (error) {
+        const msg = error.details.map(el => el.message).join(',')
+        throw new ExpressError(msg, 400)
+    } else next()
+}
+
 module.exports = function (app) {
-    //INDEX
+//INDEX
     app.get('/campgrounds', catchAsync(async (req, res) => {
         const campgrounds = await Campground.find({})
         res.render('campgrounds/index', {campgrounds})
@@ -33,8 +43,8 @@ module.exports = function (app) {
 
 //CREATE
     app.post('/campgrounds', validateCampground, catchAsync(async (req, res) => {
-        const campground = await Campground.create(req.body)
-        console.log(campground)
+        const campground = new Campground.create(req.body)
+        await campground.save()
         res.redirect(`/campgrounds/${campground._id}`)
     }))
 
@@ -44,6 +54,7 @@ module.exports = function (app) {
         res.render('campgrounds/show', {campground})
     }))
 
+
 //EDIT
     app.get('/campgrounds/:id/edit', catchAsync(async (req, res) => {
         const campground = await Campground.findById(req.params.id)
@@ -51,7 +62,7 @@ module.exports = function (app) {
     }))
 
 //UPDATE
-    app.put('/campgrounds/:id',  validateCampground, catchAsync(async (req, res) => {
+    app.put('/campgrounds/:id', validateCampground, catchAsync(async (req, res) => {
         const campground = await Campground.findByIdAndUpdate(req.params.id, req.body)
         res.redirect(`/campgrounds/${campground._id}`)
     }))
@@ -60,6 +71,16 @@ module.exports = function (app) {
     app.delete('/campgrounds/:id', catchAsync(async (req, res) => {
         await Campground.findByIdAndRemove(req.params.id)
         res.redirect(`/campgrounds`)
+    }))
+
+//CREATE REVIEW
+    app.post('/campgrounds/:id/reviews', validateReview, catchAsync(async (req, res) => {
+        const campground = await Campground.findById(req.params.id)
+        const review = new Review(req.body.review)
+        campground.reviews.push(review)
+        await review.save()
+        await campground.save()
+        res.redirect(`/campgrounds/${campground._id}`)
     }))
 
     app.all('*', (req, res, next) => {
